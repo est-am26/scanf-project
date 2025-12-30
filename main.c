@@ -2,14 +2,23 @@
 #include "my_scanf.h"
 
 int main() {
-    int edad = 0;
+    int edad;
+    char inicial;
+    char nombre[50];
 
-    printf("Por favor, escribe tu edad: ");
+    printf("Escribe tu nombre: ");
+    my_scanf("%s", nombre);
 
-    // Llamamos a TU función my_scanf
+    printf("Escribe tu inicial: ");
+    my_scanf("%c", &inicial); // Nota: a veces hay que limpiar el buffer antes
+
+    printf("Escribe tu edad: ");
     my_scanf("%d", &edad);
 
-    printf("¡Increíble! Tienes %d años.\n", edad);
+    printf("\n--- RESULTADOS ---\n");
+    printf("Nombre: %s\n", nombre);
+    printf("Inicial: %c\n", inicial);
+    printf("Edad: %d\n", edad);
 
     return 0;
 }

@@ -42,7 +42,42 @@ int my_scanf(const char *format, ...) {
                 ungetc(c, stdin);
                 count++;
             }
-            // Aquí irán los otros: else if (*p == 'c'), etc.
+            else if (*p == 'c') {
+                char *dest = va_arg(args, char *);
+                int c;
+
+                // AÑADE ESTO: Saltar espacios/enters antes de leer el caracter
+                do {
+                    c = getchar();
+                } while (isspace(c));
+
+                *dest = (char)c;
+                count++;
+            }
+            else if (*p == 's') {
+                // 1. Obtenemos el puntero al array de caracteres
+                char *dest = va_arg(args, char *);
+                int c;
+
+                // 2. Saltamos espacios en blanco al principio
+                do {
+                    c = getchar();
+                } while (isspace(c));
+
+                // 3. Leemos hasta encontrar otro espacio o fin de línea
+                while (c != EOF && !isspace(c)) {
+                    *dest = (char)c; // Guardamos el carácter actual
+                    dest++;          // Movemos el puntero a la siguiente posición
+                    c = getchar();
+                }
+
+                // 4. MUY IMPORTANTE: Cerramos el string con el carácter nulo
+                *dest = '\0';
+
+                // 5. Devolvemos el espacio al buffer
+                ungetc(c, stdin);
+                count++;
+            }
         }
         p++;
     }
