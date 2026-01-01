@@ -44,6 +44,58 @@ int read_int() {
     return valor * sign;
 }
 
+// Helper function to read a single character, skipping leading whitespace
+char read_char() {
+    int c;
+
+    // 1. Skip leading whitespace/newlines
+    do {
+        c = getchar();
+    } while (isspace(c));
+
+    /* 2. Type casting from int to char.
+     * Since getchar() returns an 'int' (to handle EOF), we explicitly
+     * cast it to a 'char' to match our return type and store the symbol.
+     */
+    return (char)c;
+}
+
+// Helper function to read a string into a provided memory buffer
+void read_string(char *dest) {
+    int c;
+
+    /* 1. Skip leading whitespace.
+     * Like %d and %c, we ignore any spaces or newlines before the
+     * actual word starts.
+     */
+    do {
+        c = getchar();
+    } while (isspace(c));
+
+    /* 2. Read characters until whitespace or EOF is encountered.
+     * We store each character in the memory address pointed to by 'dest',
+     * then increment 'dest' to move to the next byte in the array.
+     */
+    while (c != EOF && !isspace(c)) {
+        *dest = (char)c;
+        dest++;
+        c = getchar();
+    }
+
+    /* 3. Null-terminate the string.
+     * Crucial step: we add '\0' at the end so C knows where the string finishes.
+     */
+    *dest = '\0';
+
+    /* 4. Restore the buffer.
+     * We push the last character read (the space or newline that stopped the loop)
+     * back to the input stream for the next scan.
+     */
+    if (c != EOF) {
+        ungetc(c, stdin);
+    }
+}
+
 int my_scanf(const char *format, ...) {
     va_list args;
     va_start(args, format);
@@ -62,38 +114,12 @@ int my_scanf(const char *format, ...) {
             }
             else if (*p == 'c') {
                 char *dest = va_arg(args, char *);
-                int c;
-
-                // AÑADE ESTO: Saltar espacios/enters antes de leer el caracter
-                do {
-                    c = getchar();
-                } while (isspace(c));
-
-                *dest = (char)c;
+                *dest = read_char(); // Llamamos al ayudante
                 count++;
             }
             else if (*p == 's') {
-                // 1. Obtenemos el puntero al array de caracteres
-                char *dest = va_arg(args, char *);
-                int c;
-
-                // 2. Saltamos espacios en blanco al principio
-                do {
-                    c = getchar();
-                } while (isspace(c));
-
-                // 3. Leemos hasta encontrar otro espacio o fin de línea
-                while (c != EOF && !isspace(c)) {
-                    *dest = (char)c; // Guardamos el carácter actual
-                    dest++;          // Movemos el puntero a la siguiente posición
-                    c = getchar();
-                }
-
-                // 4. MUY IMPORTANTE: Cerramos el string con el carácter nulo
-                *dest = '\0';
-
-                // 5. Devolvemos el espacio al buffer
-                ungetc(c, stdin);
+                char *dest = va_arg(args, char *); // Obtenemos el puntero del array
+                read_string(dest);                // Le pasamos el puntero al ayudante
                 count++;
             }
             else if (*p == 'x') {
