@@ -96,6 +96,124 @@ void read_string(char *dest) {
     }
 }
 
+// Helper function to read a hexadecimal integer (base 16)
+// Unlike %d (decimal), the C standard typically treats hexadecimal numbers as unsigned (pure positives
+// representing memory addresses or binary values). That's why we use `unsigned int` both in the function return and
+// the dest pointer.
+unsigned int read_hex() {
+    int c;
+    unsigned int valor = 0;
+
+    /* 1. Skip leading whitespace.
+     * Standard scanf behavior: ignore any spaces, tabs or newlines
+     * before the actual hexadecimal digits.
+     */
+    do {
+        c = getchar();
+    } while (isspace(c));
+
+    /* 2. HEXADECIMAL CONVERSION LOGIC:
+     * To convert hex letters (a-f) to numbers (10-15), we calculate the
+     * "distance" from 'a' using ASCII math (e.g., 'f' (102) - 'a' (97) = 5).
+     * Then, we add 10 because 'a' represents the value 10 in base 16.
+     * Example: 'f' is 5 positions away from 'a'; therefore, 5 + 10 = 15.
+     */
+    while (isxdigit(c)) {
+        int digit;
+        if (isdigit(c)) {
+            // Convert '0'-'9' to 0-9
+            digit = c - '0';
+        } else {
+            /* Convert 'a'/'A' to 10, 'b'/'B' to 11, and so on.
+             * tolower() ensures we handle both uppercase and lowercase.
+             */
+            digit = tolower(c) - 'a' + 10;
+        }
+
+        /* Shift current value by 4 bits (base 16) and add the new digit.
+         * valor * 16 is the same as moving to the next hex position.
+         */
+        valor = valor * 16 + digit;
+        c = getchar();
+    }
+
+    /* 3. Return the extra character to the buffer.
+     * We stop at the first non-hex character, so we push it back
+     * for the next format specifier to process it.
+     */
+    if (c != EOF) {
+        ungetc(c, stdin);
+    }
+
+    return valor;
+}
+
+// Helper function to read a floating-point number
+float read_float() {
+    int c;
+    float value = 0.0;
+    float sign = 1.0;
+
+    // 1. Skip leading whitespace
+    do {
+        c = getchar();
+    } while (isspace(c));
+
+    // 2. Handle optional sign
+    if (c == '-') {
+        sign = -1.0;
+        c = getchar();
+    } else if (c == '+') {
+        c = getchar();
+    }
+
+    /* 3. Process the integer part.
+     * We multiply by 10.0 to shift decimals to the left.
+     */
+    while (isdigit(c)) {
+        value = value * 10.0 + (c - '0');
+        c = getchar();
+    }
+
+    /* 4. Process the fractional part.
+     * If a dot is found, we start dividing each new digit by a divisor
+     * that grows by powers of 10 (10, 100, 1000...) to place them correctly.
+     */
+    /* 4. Process the fractional part (The "Magic Loop").
+     * Example: User inputs "3.14"
+     * * Initial: value = 3.0, divisor = 10.0
+     * * Iteration 1 (Reading '1'):
+     * - Convert: ('1' - '0') becomes the integer 1.
+     * - Position: 1 / 10.0 = 0.1.
+     * - Add: value becomes 3.1.
+     * - Next Level: divisor becomes 100.0 (hundredths).
+     * * Iteration 2 (Reading '4'):
+     * - Convert: ('4' - '0') becomes the integer 4.
+     * - Position: 4 / 100.0 = 0.04.
+     * - Add: value becomes 3.14.
+     * - Next Level: divisor becomes 1000.0.
+     * * Termination: If c is a space, newline, or a letter (like 'a'),
+     * isdigit(c) returns false, and the loop stops. The non-digit
+     * character is preserved using ungetc().
+     */
+    if (c == '.') {
+        c = getchar();
+        float divisor = 10.0;
+        while (isdigit(c)) {
+            value += (c - '0') / divisor;
+            divisor *= 10.0;
+            c = getchar();
+        }
+    }
+
+    // 5. Restore the non-digit character to the buffer
+    if (c != EOF) {
+        ungetc(c, stdin);
+    }
+
+    return value * sign;
+}
+
 int my_scanf(const char *format, ...) {
     va_list args;
     va_start(args, format);
@@ -124,67 +242,12 @@ int my_scanf(const char *format, ...) {
             }
             else if (*p == 'x') {
                 unsigned int *dest = va_arg(args, unsigned int *);
-                int c;
-
-                // 1. Skip spaces ()
-                do {
-                    c = getchar();
-                } while (isspace(c));
-
-                // 2. Lógica para Hexadecimal (Base 16)
-                unsigned int valor = 0;
-                while (isxdigit(c)) { // isxdigit reconoce 0-9, a-f, A-F
-                    int digit;
-                    if (isdigit(c)) {
-                        digit = c - '0';
-                    } else {
-                        // Convierte 'a' o 'A' en 10, 'b' en 11, etc.
-                        digit = tolower(c) - 'a' + 10;
-                    }
-                    valor = valor * 16 + digit;
-                    c = getchar();
-                }
-
-                *dest = valor;
-                ungetc(c, stdin);
+                *dest = read_hex(); // Llamamos al "Cajero" para que nos de el número
                 count++;
             }
             else if (*p == 'f') {
                 float *dest = va_arg(args, float *);
-                int c;
-
-                // 1. Saltar espacios
-                do {
-                    c = getchar();
-                } while (isspace(c));
-
-                // 2. Manejar el signo
-                float sign = 1.0;
-                if (c == '-') {
-                    sign = -1.0;
-                    c = getchar();
-                }
-
-                // 3. Leer la parte entera
-                float value = 0.0;
-                while (isdigit(c)) {
-                    value = value * 10.0 + (c - '0');
-                    c = getchar();
-                }
-
-                // 4. Leer la parte decimal si existe
-                if (c == '.') {
-                    c = getchar();
-                    float divisor = 10.0;
-                    while (isdigit(c)) {
-                        value += (c - '0') / divisor;
-                        divisor *= 10.0;
-                        c = getchar();
-                    }
-                }
-
-                *dest = value * sign;
-                ungetc(c, stdin);
+                *dest = read_float(); // El ayudante nos da el decimal terminado
                 count++;
             }
         }
