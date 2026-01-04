@@ -1,158 +1,164 @@
 #include "my_scanf.h"
 
-// Función ayudante para leer un entero
-int read_int() {
-    int c; // Guarda el carácter leído desde stdin.
-    int valor = 0; // Acumula el valor numérico del entero mientras se leen los dígitos.
-    int sign = 1; // Asume que el número es positivo por defecto (se multiplica al final con el resultado).
+/* Helper function to read a signed integer.
+ * Behavior mimics scanf: skips leading whitespace, handles +/- signs.
+ * Returns 1 on success (digits read), 0 on failure.
+ */
+int read_int(int *out) {
+    int c;
+    int sign = 1;
+    long value = 0; // Usamos long para evitar desbordamiento durante la lectura
+    int digits_read = 0;
 
-    // The loop skips over leading whitespace by repeatedly reading characters as long as they are classified as whitespace.
-    // It stops as soon as a non-whitespace character is encountered, which is the start of meaningful input.
+    // 1. Saltar espacios en blanco (Leading whitespace)
     do {
         c = getchar();
-    } while (isspace(c)); // Usa isspace para cubrir espacios, tabs, newlines, etc.
+    } while (isspace(c));
 
-    /* Check for an optional sign character.
-     * If a '-' is found, record that the number is negative
-     * and advance to the next character.
-     * If a '+' is found, simply advance to the next character.
-     */
-    if (c == '-') {
-        sign = -1;
-        c = getchar();
-    } else if (c == '+') {
+    // 2. Manejo del signo opcional (+ o -)
+    if (c == '-' || c == '+') {
+        if (c == '-') {
+            sign = -1;
+        }
+        // Leemos el siguiente carácter después del signo
         c = getchar();
     }
 
-    /* Read consecutive digit characters and build the integer value.
-     * Each new digit shifts the previous value left by one decimal place
-     * and adds the numeric value of the current character.
-     */
+    // 3. Leer dígitos
     while (isdigit(c)) {
-        valor = valor * 10 + (c - '0');
+        value = value * 10 + (c - '0');
+        digits_read++;
         c = getchar();
     }
 
-    /* The loop terminates after reading one character beyond the number.
-     * Push this non-digit character back into the input stream so it can
-     * be processed by subsequent format specifiers.
-     */
+    // 4. Devolver al buffer el carácter que nos detuvo (ej: espacio o letra)
     if (c != EOF) {
         ungetc(c, stdin);
     }
 
-    return valor * sign;
+    // 5. Verificación de Éxito
+    // Si leímos un signo pero NO leímos dígitos (ej: "-a"), es un fallo.
+    if (digits_read == 0) {
+        return 0; // Matching failure
+    }
+
+    // 6. Escribir resultado
+    *out = (int)(value * sign);
+    return 1; // Success
 }
 
-// Helper function to read a single character, skipping leading whitespace
-char read_char() {
+/* Helper function to read a single character.
+ * STANDARD BEHAVIOR: Does NOT skip leading whitespace.
+ * Returns 1 on success, 0 on failure (EOF).
+ */
+int read_char(char *out) {
+    int c = getchar();
+
+    // 1. Verificar EOF inmediatamente
+    if (c == EOF) {
+        return 0; // Failure
+    }
+
+    // 2. Guardar el carácter (sea espacio, letra o salto de línea)
+    *out = (char)c;
+    return 1; // Success
+}
+
+/* Helper function to read a string.
+ * Mimics scanf %s: Skips leading whitespace, reads until next whitespace.
+ * Returns 1 on success, 0 on failure (EOF before reading any chars).
+ * WARNING: Without a width modifier, this can cause buffer overflow (just like real scanf).
+ */
+int read_string(char *dest) { // <--- Ya no es void, ahora devuelve int (éxito/fallo)
     int c;
 
-    // 1. Skip leading whitespace/newlines
+    // 1. Skip leading whitespace
+    // (Correcto: %s SÍ salta espacios, a diferencia de %c)
     do {
         c = getchar();
     } while (isspace(c));
 
-    /* 2. Type casting from int to char.
-     * Since getchar() returns an 'int' (to handle EOF), we explicitly
-     * cast it to a 'char' to match our return type and store the symbol.
-     */
-    return (char)c;
-}
+    // 2. Check for EOF immediately after skipping whitespace
+    // Si llegamos al final del archivo y no encontramos palabra, fallamos.
+    if (c == EOF) {
+        return 0;
+    }
 
-// Helper function to read a string into a provided memory buffer
-void read_string(char *dest) {
-    int c;
-
-    /* 1. Skip leading whitespace.
-     * Like %d and %c, we ignore any spaces or newlines before the
-     * actual word starts.
-     */
-    do {
-        c = getchar();
-    } while (isspace(c));
-
-    /* 2. Read characters until whitespace or EOF is encountered.
-     * We store each character in the memory address pointed to by 'dest',
-     * then increment 'dest' to move to the next byte in the array.
-     */
+    // 3. Read characters until whitespace or EOF
     while (c != EOF && !isspace(c)) {
         *dest = (char)c;
         dest++;
         c = getchar();
     }
 
-    /* 3. Null-terminate the string.
-     * Crucial step: we add '\0' at the end so C knows where the string finishes.
-     */
+    // 4. Null-terminate (Crucial para que sea un string válido en C)
     *dest = '\0';
 
-    /* 4. Restore the buffer.
-     * We push the last character read (the space or newline that stopped the loop)
-     * back to the input stream for the next scan.
-     */
+    // 5. Restore the delimiter to the buffer
     if (c != EOF) {
         ungetc(c, stdin);
     }
+
+    return 1; // Success
 }
 
-// Helper function to read a hexadecimal integer (base 16)
-// Unlike %d (decimal), the C standard typically treats hexadecimal numbers as unsigned (pure positives
-// representing memory addresses or binary values). That's why we use `unsigned int` both in the function return and
-// the dest pointer.
-unsigned int read_hex() {
+/* Helper function to read a hexadecimal integer.
+ * Mimics scanf %x: Skips whitespace, reads 0-9, a-f, A-F.
+ * Returns 1 on success (at least one digit read), 0 on failure.
+ */
+int read_hex(unsigned int *out) {
     int c;
-    unsigned int valor = 0;
+    unsigned long value = 0; // Usamos long para seguridad durante el cálculo
+    int digits_read = 0;
 
-    /* 1. Skip leading whitespace.
-     * Standard scanf behavior: ignore any spaces, tabs or newlines
-     * before the actual hexadecimal digits.
-     */
+    // 1. Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    /* 2. HEXADECIMAL CONVERSION LOGIC:
-     * To convert hex letters (a-f) to numbers (10-15), we calculate the
-     * "distance" from 'a' using ASCII math (e.g., 'f' (102) - 'a' (97) = 5).
-     * Then, we add 10 because 'a' represents the value 10 in base 16.
-     * Example: 'f' is 5 positions away from 'a'; therefore, 5 + 10 = 15.
-     */
+    // 2. Read Hex Digits
+    // isxdigit() verifica si es 0-9, a-f o A-F.
     while (isxdigit(c)) {
         int digit;
+
         if (isdigit(c)) {
-            // Convert '0'-'9' to 0-9
             digit = c - '0';
         } else {
-            /* Convert 'a'/'A' to 10, 'b'/'B' to 11, and so on.
-             * tolower() ensures we handle both uppercase and lowercase.
-             */
+            // Tu lógica original: Convertimos letra a 10-15
             digit = tolower(c) - 'a' + 10;
         }
 
-        /* Shift current value by 4 bits (base 16) and add the new digit.
-         * valor * 16 is the same as moving to the next hex position.
-         */
-        valor = valor * 16 + digit;
+        value = value * 16 + digit;
+        digits_read++;
         c = getchar();
     }
 
-    /* 3. Return the extra character to the buffer.
-     * We stop at the first non-hex character, so we push it back
-     * for the next format specifier to process it.
-     */
+    // 3. Restore non-hex character
     if (c != EOF) {
         ungetc(c, stdin);
     }
 
-    return valor;
+    // 4. Validation: Did we read anything?
+    // Si encontramos "gato", saltamos espacios, leemos 'g' (no es hex),
+    // digits_read es 0 -> Devolvemos fallo.
+    if (digits_read == 0) {
+        return 0;
+    }
+
+    // 5. Store result
+    *out = (unsigned int)value;
+    return 1; // Success
 }
 
-// Helper function to read a floating-point number
-float read_float() {
+/* Helper function to read a floating-point number.
+ * Mimics scanf %f: Handles signs, integer part, and fractional part.
+ * Returns 1 on success (read a valid number), 0 on failure.
+ */
+int read_float(float *out) {
     int c;
-    float value = 0.0;
-    float sign = 1.0;
+    float value = 0.0f;
+    float sign = 1.0f;
+    int has_digits = 0; // Bandera para saber si leímos al menos un número
 
     // 1. Skip leading whitespace
     do {
@@ -160,58 +166,47 @@ float read_float() {
     } while (isspace(c));
 
     // 2. Handle optional sign
-    if (c == '-') {
-        sign = -1.0;
-        c = getchar();
-    } else if (c == '+') {
+    if (c == '+' || c == '-') {
+        if (c == '-') {
+            sign = -1.0f;
+        }
         c = getchar();
     }
 
-    /* 3. Process the integer part.
-     * We multiply by 10.0 to shift decimals to the left.
-     */
+    // 3. Process the integer part (Left of dot)
     while (isdigit(c)) {
-        value = value * 10.0 + (c - '0');
+        has_digits = 1; // ¡Encontramos un dígito!
+        value = value * 10.0f + (c - '0');
         c = getchar();
     }
 
-    /* 4. Process the fractional part.
-     * If a dot is found, we start dividing each new digit by a divisor
-     * that grows by powers of 10 (10, 100, 1000...) to place them correctly.
-     */
-    /* 4. Process the fractional part (The "Magic Loop").
-     * Example: User inputs "3.14"
-     * * Initial: value = 3.0, divisor = 10.0
-     * * Iteration 1 (Reading '1'):
-     * - Convert: ('1' - '0') becomes the integer 1.
-     * - Position: 1 / 10.0 = 0.1.
-     * - Add: value becomes 3.1.
-     * - Next Level: divisor becomes 100.0 (hundredths).
-     * * Iteration 2 (Reading '4'):
-     * - Convert: ('4' - '0') becomes the integer 4.
-     * - Position: 4 / 100.0 = 0.04.
-     * - Add: value becomes 3.14.
-     * - Next Level: divisor becomes 1000.0.
-     * * Termination: If c is a space, newline, or a letter (like 'a'),
-     * isdigit(c) returns false, and the loop stops. The non-digit
-     * character is preserved using ungetc().
-     */
+    // 4. Process the fractional part (Right of dot)
     if (c == '.') {
-        c = getchar();
-        float divisor = 10.0;
+        c = getchar(); // Consumimos el punto
+        float divisor = 10.0f;
+
         while (isdigit(c)) {
+            has_digits = 1; // ¡Encontramos un dígito!
             value += (c - '0') / divisor;
-            divisor *= 10.0;
+            divisor *= 10.0f;
             c = getchar();
         }
     }
 
-    // 5. Restore the non-digit character to the buffer
+    // 5. Restore the non-digit character
     if (c != EOF) {
         ungetc(c, stdin);
     }
 
-    return value * sign;
+    // 6. Validation Check
+    // Si solo leímos un signo '+' o un punto '.' sin números, fallamos.
+    if (!has_digits) {
+        return 0; // Failure
+    }
+
+    // 7. Store result
+    *out = value * sign;
+    return 1; // Success
 }
 
 // Helper function to read a binary number (base 2)
@@ -296,7 +291,7 @@ static int hex_pair_to_int() {
 /* Reads an RGB color in #RRGGBB format.
  * Returns 1 on success, 0 on failure.
  */
-static int read_color(RGBColor *out) {
+int read_color(RGBColor *out) {
     int c;
 
     // Skip whitespace
@@ -428,29 +423,55 @@ int my_scanf(const char *format, ...) {
             p++; // Saltamos el % para ver qué letra sigue
 
             if (*p == 'd') {
-                int *dest = va_arg(args, int *); // Obtenemos la dirección
-                *dest = read_int();             // Llamamos a la función pequeña
-                count++;
+                int *dest = va_arg(args, int *); // declarando una variable dest que guarda una direccion que viene. Vas a guardar la dirección de memoria de la variable del usuario DENTRO de tu variable local puntero.
+                if (read_int(dest)) { // Ahora usamos el if // pasa la direccion donde guardarlo
+                    count++;
+                } else {
+                    va_end(args);
+                    return count; // Se detiene si falla (ej: era una letra)
+                }
             }
             else if (*p == 'c') {
-                char *dest = va_arg(args, char *);
-                *dest = read_char(); // Llamamos al ayudante
-                count++;
+                char *dest = va_arg(args, char *); // 1. Pedimos la dirección
+
+                // 2. Llamamos a la función pasando la dirección
+                //    y verificamos si devolvió 1 (éxito) o 0 (EOF)
+                if (read_char(dest)) {
+                    count++;
+                } else {
+                    va_end(args); // Limpieza antes de salir
+                    return count; // EOF encontrado
+                }
             }
             else if (*p == 's') {
-                char *dest = va_arg(args, char *); // Obtenemos el puntero del array
-                read_string(dest);                // Le pasamos el puntero al ayudante
-                count++;
+                char *dest = va_arg(args, char *);
+                // Ahora verificamos si realmente se leyó algo
+                if (read_string(dest)) {
+                    count++;
+                } else {
+                    va_end(args);
+                    return count; // EOF encontrado antes de leer la palabra
+                }
             }
             else if (*p == 'x') {
                 unsigned int *dest = va_arg(args, unsigned int *);
-                *dest = read_hex(); // Llamamos al "Cajero" para que nos de el número
-                count++;
+                // Verificamos si read_hex tuvo éxito
+                if (read_hex(dest)) {
+                    count++;
+                } else {
+                    va_end(args);
+                    return count; // Fallo (ej: no era un número hex)
+                }
             }
             else if (*p == 'f') {
-                float *dest = va_arg(args, float *);
-                *dest = read_float(); // El ayudante nos da el decimal terminado
-                count++;
+                float *dest = va_arg(args, float *); // Pedimos la dirección
+
+                if (read_float(dest)) { // Verificamos si se leyó un número válido
+                    count++;
+                } else {
+                    va_end(args);
+                    return count; // Fallo (ej: usuario escribió "hola" o solo ".")
+                }
             }
             else if (*p == 'b') {
                 unsigned int *dest = va_arg(args, unsigned int *);
