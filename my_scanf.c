@@ -217,265 +217,402 @@ int read_hex(unsigned long long *out, int width) {
     return 1;
 }
 
-/* Helper function to read a floating-point number.
- * Mimics scanf %f: Handles signs, integer part, and fractional part.
- * Returns 1 on success (read a valid number), 0 on failure.
+/* Helper function to read a floating-point number with modifiers.
+ * out: Pointer to store result (double). If NULL, acts as suppression (%*f).
+ * width: Max chars to read. -1 means no limit.
+ * Returns: 1 on success, 0 on failure.
  */
-int read_float(float *out) {
+int read_float(double *out, int width) {
     int c;
-    float value = 0.0f;
-    float sign = 1.0f;
-    int has_digits = 0; // Bandera para saber si leímos al menos un número
+    double value = 0.0;
+    double sign = 1.0;
+    int has_digits = 0;
+    int chars_processed = 0;
+    int has_width = (width > 0);
 
     // 1. Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    // 2. Handle optional sign
+    // 2. Check EOF
+    if (c == EOF) return 0;
+
+    // 3. Handle optional sign
     if (c == '+' || c == '-') {
-        if (c == '-') {
-            sign = -1.0f;
+        // Chequeo de ancho: Si width=1, solo cabe el signo -> Fallo técnico o parada
+        if (has_width && chars_processed >= width) {
+            ungetc(c, stdin);
+            return 0;
         }
+        if (c == '-') sign = -1.0;
+        chars_processed++;
         c = getchar();
     }
 
-    // 3. Process the integer part (Left of dot)
+    // 4. Process Integer Part
     while (isdigit(c)) {
-        has_digits = 1; // ¡Encontramos un dígito!
-        value = value * 10.0f + (c - '0');
+        if (has_width && chars_processed >= width) {
+            ungetc(c, stdin); // Devolvemos el char que sobra
+            break; // Salimos del bucle
+        }
+        has_digits = 1;
+        value = value * 10.0 + (c - '0');
+        chars_processed++;
         c = getchar();
     }
 
-    // 4. Process the fractional part (Right of dot)
-    if (c == '.') {
-        c = getchar(); // Consumimos el punto
-        float divisor = 10.0f;
+    // 5. Process Fractional Part
+    // Solo entramos si no hemos llegado al límite y encontramos un punto
+    if (c == '.' && (!has_width || chars_processed < width)) {
+        chars_processed++; // Contamos el punto
+        c = getchar();
+        double divisor = 10.0;
 
         while (isdigit(c)) {
-            has_digits = 1; // ¡Encontramos un dígito!
+            if (has_width && chars_processed >= width) {
+                ungetc(c, stdin);
+                break;
+            }
+            has_digits = 1;
             value += (c - '0') / divisor;
-            divisor *= 10.0f;
+            divisor *= 10.0;
+            chars_processed++;
             c = getchar();
         }
     }
 
-    // 5. Restore the non-digit character
-    if (c != EOF) {
-        ungetc(c, stdin);
+    // 6. Restore non-digit character
+    // IMPORTANTE: Solo hacemos ungetc si NO salimos por culpa del break (width limit)
+    // Pero para simplificar: verificamos si 'c' sigue siendo el carácter actual leído
+    // Si el bucle while rompió, 'c' es el carácter que sobró.
+    if (c != EOF && (!has_width || chars_processed < width)) {
+         ungetc(c, stdin);
+    }
+    // Nota: Si el bucle rompió por width, ya hicimos ungetc dentro.
+
+    // 7. Validation
+    if (!has_digits) return 0;
+
+    // 8. Store result
+    if (out != NULL) {
+        *out = value * sign;
     }
 
-    // 6. Validation Check
-    // Si solo leímos un signo '+' o un punto '.' sin números, fallamos.
-    if (!has_digits) {
-        return 0; // Failure
-    }
-
-    // 7. Store result
-    *out = value * sign;
-    return 1; // Success
+    return 1;
 }
-
-// Helper function to read a binary number (base 2)
-unsigned int read_binary() {
+/* Helper function to read a binary number with modifiers.
+ * out: Pointer to store result (unsigned long long).
+ * If NULL, acts as suppression (%*b).
+ * width: Max chars to read. -1 means no limit.
+ * Returns: 1 on success, 0 on failure.
+ */
+int read_binary(unsigned long long *out, int width) {
     int c;
-    unsigned int valor = 0;
+    unsigned long long value = 0;
+    int digits_read = 0;
+    int chars_processed = 0;
+    int has_width = (width > 0);
 
     // 1. Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    /* 2. Process binary digits (0 and 1 only).
-     * If any other character appears, the number ends there.
-     */
+    // 2. Check EOF
+    if (c == EOF) return 0;
+
+    // 3. Process binary digits (0 and 1 only)
     while (c == '0' || c == '1') {
-        /* Shift current value left by 1 bit (multiply by 2)
-         * and add the new digit.
-         */
-        valor = (valor << 1) | (c - '0');
+        // Verificar ancho
+        if (has_width && chars_processed >= width) {
+            ungetc(c, stdin); // Devolvemos el sobrante
+            break;
+        }
+
+        // Bitwise Shift: Desplazar a la izquierda es multiplicar por 2
+        // Ejemplo: tenemos 1 (binary 1). Llega 0.
+        // 1 << 1 = 10 (binary 2). 10 | 0 = 10.
+        value = (value << 1) | (c - '0');
+
+        digits_read++;
+        chars_processed++;
         c = getchar();
     }
 
-    // 3. Put back the character that stopped the loop
-    if (c != EOF) {
+    // 4. Restore non-binary character
+    if (c != EOF && (!has_width || chars_processed < width)) {
         ungetc(c, stdin);
     }
 
-    return valor;
+    // 5. Validation
+    if (digits_read == 0) return 0;
+
+    // 6. Store result
+    if (out != NULL) {
+        *out = value;
+    }
+
+    return 1;
 }
 
-// Helper function to read a full line (including spaces)
-void read_line(char *dest) {
+/* Helper function to read a full line until newline.
+ * Mimics %[^\n]: Reads spaces, tabs, words... stops ONLY at '\n'.
+ * width: Max chars to read.
+ * out: Buffer. If NULL, acts as suppression.
+ */
+int read_line(char *out, int width) {
     int c;
+    int chars_read = 0;
 
-    /* 1. Skip ONLY leading newlines or tabs,
-     * but we might want to keep spaces if it's a full line.
-     * For now, let's follow the standard and skip leading whitespace.
-     */
+    // Si width es -1, ponemos límite de seguridad (INT_MAX)
+    if (width == -1) {
+        width = 2147483647;
+    }
+
+    // 1. Skip leading whitespace?
+    // DECISIÓN DE DISEÑO: scanf("%[^\n]") estándar NO salta espacios iniciales.
+    // Pero tu código original SÍ lo hacía. Mantendré TU lógica original
+    // porque es más cómoda para el usuario (salta el Enter del input anterior).
     do {
         c = getchar();
     } while (isspace(c));
 
-    /* 2. Read everything until we hit a newline or EOF.
-     * This is what allows "Juan Perez" to be read as one single string.
-     */
-    while (c != EOF && c != '\n') {
-        *dest = (char)c;
-        dest++;
+    // 2. Check EOF
+    if (c == EOF) return 0;
+
+    // 3. Read until Newline ('\n') or Width limit
+    while (c != EOF && c != '\n' && chars_read < width) {
+        if (out != NULL) {
+            *out = (char)c;
+            out++;
+        }
+        chars_read++;
         c = getchar();
     }
 
-    // 3. Null-terminate
-    *dest = '\0';
+    // 4. Null-terminate
+    if (out != NULL) {
+        *out = '\0';
+    }
+
+    // 5. Handling the Newline logic
+    // Aquí hay dos escuelas de pensamiento:
+    // A) Scanf estándar: Deja el '\n' en el buffer para la siguiente lectura.
+    // B) Gets/User friendly: Consume el '\n' para limpiar el buffer.
+    // Tu código original consumía el '\n' (porque no hacías ungetc si era \n).
+    // Para ser consistente con scanf, DEBERÍAMOS devolverlo.
+    if (c == '\n') {
+        ungetc(c, stdin);
+    } else if (c != EOF) {
+        // Si paramos por width limit (y no es \n), también lo devolvemos.
+        ungetc(c, stdin);
+    }
+
+    return 1;
 }
 
-/* Converts two hex characters from stdin to an integer (0-255).
- * Returns -1 if an invalid hex character is encountered.
- */
-static int hex_pair_to_int() {
+/* --------------------------------------------------------------------------
+ * INTERNAL HELPER (Static)
+ * Esta función es privada. Solo read_color la puede ver.
+ * Reads exactly 2 hex digits and converts to int (0-255).
+ * -------------------------------------------------------------------------- */
+static int read_hex_pair() {
     int total = 0;
-    for (int i = 0; i < 2; i++) {
-        int c = getchar();
-        int digit = -1; // Empezamos asumiendo error
 
-        if (isdigit(c)) digit = c - '0';
-        else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
-        else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+    // Leemos el primer dígito (High nibble)
+    int c1 = getchar();
+    int d1 = -1;
 
-        // Si el carácter no era hex, devolvemos error inmediatamente
-        if (digit == -1) {
-            if (c != EOF) ungetc(c, stdin); // Devolvemos el carácter erróneo
-            return -1;
+    // Lógica de conversión
+    if (isdigit(c1)) d1 = c1 - '0';
+    else if (c1 >= 'a' && c1 <= 'f') d1 = c1 - 'a' + 10;
+    else if (c1 >= 'A' && c1 <= 'F') d1 = c1 - 'A' + 10;
+
+    if (d1 == -1) {
+        if (c1 != EOF) ungetc(c1, stdin);
+        return -1;
+    }
+
+    // Leemos el segundo dígito (Low nibble)
+    int c2 = getchar();
+    int d2 = -1;
+
+    if (isdigit(c2)) d2 = c2 - '0';
+    else if (c2 >= 'a' && c2 <= 'f') d2 = c2 - 'a' + 10;
+    else if (c2 >= 'A' && c2 <= 'F') d2 = c2 - 'A' + 10;
+
+    if (d2 == -1) {
+        if (c2 != EOF) ungetc(c2, stdin);
+        return -1;
+    }
+
+    return (d1 * 16) + d2;
+}
+
+/* --------------------------------------------------------------------------
+ * PUBLIC HELPER (Non-static)
+ * Esta función es pública para que my_scanf la use.
+ * Reads an RGB color in #RRGGBB format.
+ * -------------------------------------------------------------------------- */
+int read_color(RGBColor *out, int width) {
+    int c;
+    int chars_processed = 0;
+    int has_width = (width > 0);
+
+    // 1. Skip whitespace
+    do {
+        c = getchar();
+    } while (isspace(c));
+
+    if (c == EOF) return 0;
+
+    // 2. Check Width at start
+    if (has_width && chars_processed >= width) {
+        ungetc(c, stdin);
+        return 0;
+    }
+
+    // 3. Match '#'
+    if (c != '#') {
+        ungetc(c, stdin);
+        return 0;
+    }
+    chars_processed++;
+
+    // 4. Read Pairs using the STATIC helper
+    int components[3]; // R, G, B
+
+    for (int i = 0; i < 3; i++) {
+        // Chequeo de seguridad: Necesitamos espacio para 2 caracteres más
+        if (has_width && (chars_processed + 2 > width)) {
+            return 0;
         }
 
-        if (i == 0) total += digit * 16;
-        else total += digit;
-    }
-    return total;
-}
-
-/* Reads an RGB color in #RRGGBB format.
- * Returns 1 on success, 0 on failure.
- */
-int read_color(RGBColor *out) {
-    int c;
-
-    // Skip whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
-
-    if (c != '#') {
-        if (c != EOF) ungetc(c, stdin);
-        return 0; // Error: No empieza con '#'
+        int val = read_hex_pair();
+        if (val == -1) {
+            return 0;
+        }
+        components[i] = val;
+        chars_processed += 2;
     }
 
-    // Leemos a variables temporales para no romper 'out' si falla a la mitad
-    int r = hex_pair_to_int();
-    if (r == -1) return 0;
+    // 5. Store result
+    if (out != NULL) {
+        out->r = components[0];
+        out->g = components[1];
+        out->b = components[2];
+    }
 
-    int g = hex_pair_to_int();
-    if (g == -1) return 0;
-
-    int b = hex_pair_to_int();
-    if (b == -1) return 0;
-
-    // Si llegamos aquí, todo es válido. Guardamos.
-    out->r = r;
-    out->g = g;
-    out->b = b;
     return 1;
 }
 
 /* Helper function to read a date (DD/MM/YYYY or DD-MM-YYYY).
- * Returns 1 on success, 0 on failure.
+ * out: Pointer to Date struct. If NULL, logic acts as suppression.
+ * width: Max total characters to read. -1 means no limit.
+ * Returns: 1 on success (valid format), 0 on failure.
  */
-static int read_date(Date *out) {
+int read_date(Date *out, int width) {
     int d = 0, m = 0, y = 0;
     int c;
-    int sep1, sep2;
-    int digits_read;
+    int sep1 = 0; // Guardamos el primer separador para ver si coincide con el segundo
+    int chars_processed = 0;
+    int has_width = (width > 0);
 
-    // --- PASO 1: LEER EL DÍA ---
-
-    // Saltar espacios en blanco iniciales
+    // 1. Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    // Leer dígitos del día
-    digits_read = 0;
+    // 2. Check EOF
+    if (c == EOF) return 0;
+
+    // --- PASO A: LEER EL DÍA ---
+    int digits_d = 0;
     while (isdigit(c)) {
+        if (has_width && chars_processed >= width) { ungetc(c, stdin); return 0; }
+
         d = d * 10 + (c - '0');
-        digits_read++;
+        digits_d++;
+        chars_processed++;
         c = getchar();
     }
-    // Si no leímos ningún número (ej: empezó con una letra), fallamos.
-    if (digits_read == 0) {
+    if (digits_d == 0) { // No leímos número
         if (c != EOF) ungetc(c, stdin);
         return 0;
     }
 
-    // --- PASO 2: VERIFICAR PRIMER SEPARADOR ---
+    // --- PASO B: LEER PRIMER SEPARADOR (/ o -) ---
+    if (has_width && chars_processed >= width) { ungetc(c, stdin); return 0; }
 
-    // 'c' tiene el carácter que detuvo el número anterior. Debe ser / o -
-    sep1 = c;
-    if (sep1 != '/' && sep1 != '-') {
-        if (sep1 != EOF) ungetc(sep1, stdin);
+    if (c == '/' || c == '-') {
+        sep1 = c;
+        chars_processed++;
+        c = getchar();
+    } else {
+        // Falta el separador obligatorio
+        ungetc(c, stdin);
         return 0;
     }
 
-    // --- PASO 3: LEER EL MES ---
-
-    c = getchar(); // Leemos el siguiente carácter después del separador
-    digits_read = 0;
+    // --- PASO C: LEER EL MES ---
+    int digits_m = 0;
     while (isdigit(c)) {
+        if (has_width && chars_processed >= width) { ungetc(c, stdin); return 0; }
+
         m = m * 10 + (c - '0');
-        digits_read++;
+        digits_m++;
+        chars_processed++;
         c = getchar();
     }
-    if (digits_read == 0) {
-        if (c != EOF) ungetc(c, stdin);
-        return 0;
+    if (digits_m == 0) {
+        ungetc(c, stdin); return 0;
     }
 
-    // --- PASO 4: VERIFICAR SEGUNDO SEPARADOR ---
+    // --- PASO D: LEER SEGUNDO SEPARADOR ---
+    if (has_width && chars_processed >= width) { ungetc(c, stdin); return 0; }
 
-    sep2 = c;
-    // Debe ser igual al primero (no vale mezclar / con -)
-    if (sep2 != sep1) {
-        if (sep2 != EOF) ungetc(sep2, stdin);
-        return 0;
+    // Validación estricta: El segundo separador debe ser igual al primero (ej: 12-12-2022)
+    if (c != sep1) {
+        ungetc(c, stdin);
+        return 0; // Formato mixto (12/12-2022) o falta separador
     }
+    chars_processed++;
+    c = getchar(); // Consumimos el separador
 
-    // --- PASO 5: LEER EL AÑO ---
-
-    c = getchar();
-    digits_read = 0;
+    // --- PASO E: LEER EL AÑO ---
+    int digits_y = 0;
     while (isdigit(c)) {
+        if (has_width && chars_processed >= width) { ungetc(c, stdin); break; }
+
         y = y * 10 + (c - '0');
-        digits_read++;
+        digits_y++;
+        chars_processed++;
         c = getchar();
     }
-    if (digits_read == 0) {
-        if (c != EOF) ungetc(c, stdin);
-        return 0;
+    if (digits_y == 0) {
+        ungetc(c, stdin); return 0;
     }
 
-    // Devolvemos el carácter que no es número (espacio o enter) al buffer
-    if (c != EOF) ungetc(c, stdin);
+    // Restore trailing character
+    if (c != EOF && (!has_width || chars_processed < width)) {
+        ungetc(c, stdin);
+    }
 
-    // --- PASO 6: VALIDACIÓN LÓGICA ---
-    if (d < 1 || d > 31) return 0;
-    if (m < 1 || m > 12) return 0;
-    if (y < 0) return 0; // Aceptamos año 0, pero no negativos
+    // --- PASO F: VALIDACIÓN LÓGICA BÁSICA ---
+    // (Opcional, pero recomendado para una fecha real)
+    if (m < 1 || m > 12 || d < 1 || d > 31) {
+        return 0; // Fecha imposible
+    }
 
-    // Todo correcto: guardamos en la estructura
-    out->day = d;
-    out->month = m;
-    out->year = y;
-    return 1;
+    // --- PASO G: GUARDAR RESULTADO ---
+    if (out != NULL) {
+        out->day = d;
+        out->month = m;
+        out->year = y;
+    }
+
+    return 1; // Success
 }
 
 int my_scanf(const char *format, ...) {
@@ -711,22 +848,95 @@ int my_scanf(const char *format, ...) {
                 }
             }
             else if (*p == 'b') {
-                unsigned int *dest = va_arg(args, unsigned int *);
-                *dest = read_binary();
-                count++;
-            }
-            else if (*p == 'S') { // S mayúscula para "Super String" o "Line String"
-                char *dest = va_arg(args, char *);
-                read_line(dest);
-                count++;
-            }
-            else if (*p == 'D') {
-                Date *date_dest = va_arg(args, Date *);
-                if (read_date(date_dest)) {
+                unsigned long long buffer_val;
+                unsigned long long *ptr_to_pass = &buffer_val;
+
+                // Supresión
+                if (suppress) {
+                    ptr_to_pass = NULL;
+                }
+
+                // Llamada a la función
+                if (!read_binary(ptr_to_pass, width)) {
+                    va_end(args);
+                    return count;
+                }
+
+                // Reparto de tipos (Casting)
+                if (!suppress) {
+                    if (length_mod == 4) { // ll (long long)
+                        unsigned long long *dest = va_arg(args, unsigned long long *);
+                        *dest = buffer_val;
+                    }
+                    else if (length_mod == 3) { // l (long)
+                        unsigned long *dest = va_arg(args, unsigned long *);
+                        *dest = (unsigned long)buffer_val;
+                    }
+                    else if (length_mod == 1) { // h (short)
+                        unsigned short *dest = va_arg(args, unsigned short *);
+                        *dest = (unsigned short)buffer_val;
+                    }
+                    else if (length_mod == 2) { // hh (char / byte)
+                        unsigned char *dest = va_arg(args, unsigned char *);
+                        *dest = (unsigned char)buffer_val;
+                    }
+                    else { // 0: int normal
+                        unsigned int *dest = va_arg(args, unsigned int *);
+                        *dest = (unsigned int)buffer_val;
+                    }
                     count++;
+                }
+            }
+            else if (*p == 'L') { // O la letra que uses para "Leer Línea"
+                char *dest = NULL;
+
+                if (!suppress) {
+                    dest = va_arg(args, char *);
+                }
+
+                if (read_line(dest, width)) {
+                    if (!suppress) count++;
                 } else {
                     va_end(args);
                     return count;
+                }
+            }
+            else if (*p == 'D') {
+                // Puntero a Date
+                Date *date_dest = NULL;
+
+                // Si NO es supresión, sacamos el argumento
+                if (!suppress) {
+                    date_dest = va_arg(args, Date *);
+                }
+
+                // Llamamos a read_date pasando el width
+                // Si suppress es true, date_dest es NULL, y read_date solo validará sin guardar.
+                if (read_date(date_dest, width)) {
+                    if (!suppress) {
+                        count++;
+                    }
+                } else {
+                    va_end(args);
+                    return count; // Formato de fecha inválido
+                }
+            }
+            else if (*p == 'R') {
+                RGBColor *col_dest = NULL;
+
+                // Si NO es supresión, sacamos el puntero
+                if (!suppress) {
+                    col_dest = va_arg(args, RGBColor *);
+                }
+
+                // Llamamos a read_color con el width
+                if (read_color(col_dest, width)) {
+                    if (!suppress) {
+                        count++;
+                    }
+                } else {
+                    va_end(args);
+                    return count; // Formato de color inválido
                 }
             }
         } // <--- ESTA ES LA LLAVE CLAVE QUE CIERRA EL if (*p == '%')
