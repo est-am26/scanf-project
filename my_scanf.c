@@ -1,11 +1,18 @@
+#include <stdio.h>
+#include <stdarg.h>
+#include <ctype.h>
+#include <limits.h>
 #include "my_scanf.h"
 
-/* Helper function to read a signed integer with modifiers.
- * * out: Pointer to store the result (long long to cover all sizes).
- * If NULL, we assume assignment suppression (%*d) -> read but don't store.
- * width: Maximum characters to read. Pass -1 (or INT_MAX) for no limit.
- *
- * Returns: 1 on success, 0 on failure.
+/* =========================================================================
+ * HELPER FUNCTIONS
+ * ========================================================================= */
+
+/**
+ * Reads a signed integer with support for field width.
+ * @param out: Pointer to store the result (long long to support all int sizes).
+ * @param width: Max characters to read. -1 indicates no limit.
+ * @return 1 on success, 0 on failure.
  */
 int read_int(long long *out, int width) {
     int c;
@@ -13,24 +20,22 @@ int read_int(long long *out, int width) {
     long long value = 0;
     int chars_processed = 0;
     int digits_read = 0;
-    int has_width = (width > 0); // Bandera para saber si hay límite
+    int has_width = (width > 0);
 
-    // 1. Skip leading whitespace
-    // IMPORTANTE: Los espacios NO cuentan para el 'width'.
+    // Skip leading whitespace (standard scanf behavior)
     do {
         c = getchar();
     } while (isspace(c));
 
-    // 2. Check EOF after skipping spaces
     if (c == EOF) return 0;
 
-    // 3. Handle optional sign
-    // El signo SÍ cuenta para el ancho (ej: %3d de "-123" lee "-12")
+    // Handle Sign
     if (c == '-' || c == '+') {
-        // Chequeo de seguridad: Si width es 1, solo cabe el signo -> Error o parada
+        // Critical: The sign counts towards the width.
+        // If width is 1, we cannot read a signed number (e.g., "-5").
         if (has_width && chars_processed >= width) {
             ungetc(c, stdin);
-            return 0; // No hay espacio para dígitos
+            return 0;
         }
 
         if (c == '-') sign = -1;
@@ -38,17 +43,14 @@ int read_int(long long *out, int width) {
         c = getchar();
     }
 
-    // 4. Leer dígitos respetando el ancho
+    // Process Digits
     while (isdigit(c)) {
-        // Verificamos límite de ancho antes de procesar
+        // Stop if we reached the maximum field width
         if (has_width && chars_processed >= width) {
-            ungetc(c, stdin); // Devolvemos el sobrante (el dígito que ya no cabe)
+            ungetc(c, stdin); // Push back the extra character
             break;
         }
 
-        // Si 'out' es NULL (supresión), calculamos pero no guardamos (o solo ignoramos)
-        // Calculamos igual para validar desbordamientos si quisieras,
-        // pero lo mínimo es avanzar.
         value = value * 10 + (c - '0');
 
         digits_read++;
@@ -56,34 +58,34 @@ int read_int(long long *out, int width) {
         c = getchar();
     }
 
-    // 5. Restore non-digit character
+    // Restore the stopper character IF it wasn't handled by the width check.
+    // (i.e., we stopped because we found a non-digit letter)
     if (c != EOF && (!has_width || chars_processed < width)) {
         ungetc(c, stdin);
     }
-    // Nota: Si salimos por width limit, el ungetc ya se hizo arriba o el char actual
-    // es el que rompió el loop. Hay que tener cuidado aquí.
-    // Simplificación: Siempre hacemos ungetc del último char leído si no lo usamos.
-    // (La lógica del break arriba hace ungetc, así que estamos cubiertos).
 
-    // 6. Validation
     if (digits_read == 0) return 0;
 
-    // 7. Store result ONLY if not suppressed (out != NULL)
+    // Store result if not suppressed (%*d)
     if (out != NULL) {
         *out = value * sign;
     }
 
-    return 1; // Success
+    return 1;
 }
 
-/* Helper function to read characters.
- * width: Number of characters to read.
- * If width is -1 (or 0), defaults to 1.
- * out: Pointer to array. If NULL, acts as suppression (%*c).
- * NOTE: Does NOT append null terminator '\0'.
+/**
+ * Reads a specific sequence of characters.
+ * UNIQUE BEHAVIOR:
+ * 1. Does NOT skip leading whitespace (reads spaces, tabs, newlines).
+ * 2. Does NOT append a null terminator ('\0').
+ *
+ * @param out: Pointer to the buffer. If NULL, acts as suppression (%*c).
+ * @param width: Exact number of characters to read.
+ * @return 1 on success (all requested characters read), 0 on failure.
  */
 int read_char(char *out, int width) {
-    // Si el usuario pone "%c", width viene como -1. Lo cambiamos a 1.
+    // Default to 1 if no width specified (e.g., "%c")
     if (width <= 0) {
         width = 1;
     }
@@ -92,65 +94,64 @@ int read_char(char *out, int width) {
     for (i = 0; i < width; i++) {
         int c = getchar();
 
-        // Si encontramos EOF antes de terminar de leer todo el bloque, fallamos.
-        // (scanf estándar requiere leer TODO el ancho pedido o falla).
+        // Strict EOF check: standard scanf fails if it can't read the full width
         if (c == EOF) {
             return 0;
         }
 
-        // Si no es supresión, guardamos y avanzamos el puntero
+        // Store Character (if not suppressed)
         if (out != NULL) {
             out[i] = (char)c;
-            // Nota: No usamos *out++ aquí porque estamos indexando out[i]
-            // que es más claro para arrays.
         }
     }
 
-    return 1; // Éxito (se leyeron 'width' caracteres)
+    return 1;
 }
 
-/* Helper function to read a string with modifiers.
- * width: Max characters to read. -1 means "no limit" (unsafe!).
- * dest: Pointer to buffer. If NULL, logic acts as suppression (%*s).
- * Returns: 1 on success, 0 on failure (EOF at start).
+/**
+ * Reads a string (sequence of non-whitespace characters).
+ * CRITICAL BEHAVIOR:
+ * 1. Skips leading whitespace.
+ * 2. Stops at the first whitespace character.
+ * 3. ALWAYS appends a null terminator ('\0').
+ *
+ * @param out: Buffer to store the string.
+ * @param width: Max characters to read. -1 means unlimited (UNSAFE).
+ * @return 1 on success, 0 on failure.
  */
-int read_string(char *dest, int width) {
+int read_string(char *out, int width) {
     int c;
     int chars_read = 0;
 
-    // Si width no está definido (-1), permitimos leer "infinito" (hasta que se acabe la RAM o el string)
-    // Para evitar loops infinitos reales, usamos INT_MAX.
-    if (width == -1) {
-        width = 2147483647; // INT_MAX
-    }
+    // If no width specified, default to INT_MAX (read until whitespace).
+    if (width == -1) width = INT_MAX;
 
-    // 1. Skip leading whitespace
+    // Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    // 2. Check EOF
     if (c == EOF) return 0;
 
-    // 3. Read loop
-    // Condición: No es EOF, No es espacio, Y no hemos llegado al límite de width
+    // Read until whitespace OR width limit reached
     while (c != EOF && !isspace(c) && chars_read < width) {
-        // Solo escribimos si NO es supresión (dest != NULL)
-        if (dest != NULL) {
-            *dest = (char)c;
-            dest++;
+        if (out != NULL) {
+            *out = (char)c;
+            out++;
         }
         chars_read++;
+
+        // Peek at the next character
         c = getchar();
     }
 
-    // 4. Null-terminate
-    // SIEMPRE ponemos el \0 al final, incluso si cortamos por width.
-    if (dest != NULL) {
-        *dest = '\0';
+    // Append Null Terminator (Crucial for %s vs %c)
+    if (out != NULL) {
+        *out = '\0';
     }
 
-    // 5. Restore delimiter
+    // Push back the character that stopped the loop
+    // (It's either a space, new line, or the char that exceeded width)
     if (c != EOF) {
         ungetc(c, stdin);
     }
@@ -158,11 +159,17 @@ int read_string(char *dest, int width) {
     return 1;
 }
 
-/* Helper function to read a hexadecimal integer with modifiers.
- * out: Pointer to store the result (unsigned long long).
- * If NULL, acts as suppression (%*x).
- * width: Max characters to read. -1 means no limit.
- * Returns: 1 on success, 0 on failure.
+/**
+ * Reads a hexadecimal integer (base 16).
+ * BEHAVIOR:
+ * 1. Skips leading whitespace.
+ * 2. Handles optional sign (+/-).
+ * 3. Handles optional "0x" or "0X" prefix.
+ * 4. Reads digits 0-9, a-f, A-F.
+ *
+ * @param out: Pointer to store result.
+ * @param width: Max chars. -1 for no limit.
+ * @return 1 on success, 0 on failure.
  */
 int read_hex(unsigned long long *out, int width) {
     int c;
@@ -171,19 +178,44 @@ int read_hex(unsigned long long *out, int width) {
     int chars_processed = 0;
     int has_width = (width > 0);
 
-    // 1. Skip leading whitespace
+    // Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    // 2. Check EOF
     if (c == EOF) return 0;
 
-    // 3. Read Hex Digits respecting width
-    while (isxdigit(c)) {
-        // Verificar límite de ancho
+    // Handle Sign
+    int sign_multiplier = 1;
+    if (c == '-' || c == '+') {
+        // Check width before consuming sign
         if (has_width && chars_processed >= width) {
-            ungetc(c, stdin); // Devolvemos el sobrante
+            ungetc(c, stdin);
+            return 0;
+        }
+        if (c == '-') sign_multiplier = -1;
+        chars_processed++;
+        c = getchar();
+    }
+
+    // Handle optional "0x" or "0X"
+    if (c == '0') {
+        // Check if there is room for 'x' in the width limit
+        if (!has_width || chars_processed + 1 < width) {
+            int next = getchar();
+            if (next == 'x' || next == 'X') {
+                chars_processed += 2; // Consume "0x"
+                c = getchar();
+            } else {
+                ungetc(next, stdin); // Not a prefix
+            }
+        }
+    }
+
+    // Read Hex Digits
+    while (isxdigit(c)) {
+        if (has_width && chars_processed >= width) {
+            ungetc(c, stdin);
             break;
         }
 
@@ -200,107 +232,164 @@ int read_hex(unsigned long long *out, int width) {
         c = getchar();
     }
 
-    // 4. Restore non-hex character
-    // Solo si no salimos por el break del width
+    // Restore stopper
     if (c != EOF && (!has_width || chars_processed < width)) {
         ungetc(c, stdin);
     }
 
-    // 5. Validation
+    // Validate
     if (digits_read == 0) return 0;
 
-    // 6. Store result (Only if not suppressed)
+    // Store
     if (out != NULL) {
-        *out = value;
+        *out = value * sign_multiplier;
     }
 
     return 1;
 }
 
-/* Helper function to read a floating-point number with modifiers.
- * out: Pointer to store result (double). If NULL, acts as suppression (%*f).
- * width: Max chars to read. -1 means no limit.
- * Returns: 1 on success, 0 on failure.
+/**
+ * Reads a floating-point number (scanf-like behavior).
+ * Supports:
+ * - Signed numbers (+/-)
+ * - Decimal notation (123.456)
+ * - Scientific notation (1.2e-3) with rollback for invalid exponents.
+ * - Width limiting.
+ *
+ * @param out: Pointer to store the result (double).
+ * @param width: Max characters to read.
+ * @return 1 on success, 0 on failure.
  */
 int read_float(double *out, int width) {
     int c;
+    int chars = 0;
+    int has_width = (width > 0);
+
     double value = 0.0;
     double sign = 1.0;
     int has_digits = 0;
-    int chars_processed = 0;
-    int has_width = (width > 0);
 
-    // 1. Skip leading whitespace
+    // Skip leading whitespace
     do {
         c = getchar();
     } while (isspace(c));
 
-    // 2. Check EOF
     if (c == EOF) return 0;
 
-    // 3. Handle optional sign
+    // Optional sign
+    int sign_char = 0;      // Backup: Store sign char to restore it if parsing fails
+    int sign_consumed = 0;
+
     if (c == '+' || c == '-') {
-        // Chequeo de ancho: Si width=1, solo cabe el signo -> Fallo técnico o parada
-        if (has_width && chars_processed >= width) {
+        if (has_width && chars + 1 > width) {
             ungetc(c, stdin);
             return 0;
         }
         if (c == '-') sign = -1.0;
-        chars_processed++;
+        sign_char = c;
+        sign_consumed = 1;
+        chars++;
         c = getchar();
     }
 
-    // 4. Process Integer Part
+    // Integer part
     while (isdigit(c)) {
-        if (has_width && chars_processed >= width) {
-            ungetc(c, stdin); // Devolvemos el char que sobra
-            break; // Salimos del bucle
-        }
-        has_digits = 1;
+        if (has_width && chars + 1 > width) break;
         value = value * 10.0 + (c - '0');
-        chars_processed++;
+        has_digits = 1;
+        chars++;
         c = getchar();
     }
 
-    // 5. Process Fractional Part
-    // Solo entramos si no hemos llegado al límite y encontramos un punto
-    if (c == '.' && (!has_width || chars_processed < width)) {
-        chars_processed++; // Contamos el punto
-        c = getchar();
+    // Fractional part
+    if (c == '.' && (!has_width || chars + 1 <= width)) {
         double divisor = 10.0;
+        chars++;
+        c = getchar();
 
         while (isdigit(c)) {
-            if (has_width && chars_processed >= width) {
-                ungetc(c, stdin);
-                break;
-            }
-            has_digits = 1;
+            if (has_width && chars + 1 > width) break;
             value += (c - '0') / divisor;
             divisor *= 10.0;
-            chars_processed++;
+            has_digits = 1;
+            chars++;
             c = getchar();
         }
     }
 
-    // 6. Restore non-digit character
-    // IMPORTANTE: Solo hacemos ungetc si NO salimos por culpa del break (width limit)
-    // Pero para simplificar: verificamos si 'c' sigue siendo el carácter actual leído
-    // Si el bucle while rompió, 'c' es el carácter que sobró.
-    if (c != EOF && (!has_width || chars_processed < width)) {
-         ungetc(c, stdin);
+    // Exponent part
+    if (has_digits && (c == 'e' || c == 'E') &&
+        (!has_width || chars + 1 <= width)) {
+
+        int exp_sign = 1;
+        int exponent = 0;
+        int exp_digits = 0; // Only count actual digits to ensure validity
+
+        int e_char = c;        // Backup 'e'
+        int exp_sign_char = 0; // Backup '+' or '-'
+        int has_exp_sign = 0;
+
+        c = getchar(); // Consume 'e', but do NOT add to 'chars' yet (pending validation)
+
+        // Optional exponent sign
+        if (c == '+' || c == '-') {
+            // Width check: ensure space for 'e' + sign + at least 1 digit
+            if (has_width && chars + 3 > width) {
+                ungetc(c, stdin);
+                ungetc(e_char, stdin);
+                goto finish; // Abort exponent parsing
+            }
+            if (c == '-') exp_sign = -1;
+            exp_sign_char = c;
+            has_exp_sign = 1;
+            c = getchar();
+        }
+
+        // Exponent digits
+        while (isdigit(c)) {
+            // Check width against: current chars + 'e' + (sign?) + prev digits + new digit
+            int current_len = chars + 1 + has_exp_sign + exp_digits + 1;
+            if (has_width && current_len > width) break;
+
+            exponent = exponent * 10 + (c - '0');
+            exp_digits++;
+            c = getchar();
+        }
+
+        // Valid exponent = at least one DIGIT found
+        if (exp_digits > 0) {
+            // Commit the consumed characters
+            chars += 1 + has_exp_sign + exp_digits;
+
+            // Apply exponent manually (avoids <math.h> dependency)
+            while (exponent-- > 0) {
+                if (exp_sign > 0) value *= 10.0;
+                else value /= 10.0;
+            }
+        } else {
+            // Rollback invalid exponent (e.g., input was "1.2e+")
+            if (c != EOF) ungetc(c, stdin);                 // 1. Push back the stopper char
+            if (has_exp_sign) ungetc(exp_sign_char, stdin); // 2. Push back the sign
+            ungetc(e_char, stdin);                          // 3. Push back 'e'
+        }
     }
-    // Nota: Si el bucle rompió por width, ya hicimos ungetc dentro.
 
-    // 7. Validation
-    if (!has_digits) return 0;
-
-    // 8. Store result
-    if (out != NULL) {
-        *out = value * sign;
+finish:
+    // Final stopper
+    if (c != EOF) {
+        ungetc(c, stdin);
     }
 
+    // Validation: If no digits were read, fail and restore initial sign
+    if (!has_digits) {
+        if (sign_consumed) ungetc(sign_char, stdin);
+        return 0;
+    }
+
+    if (out) *out = value * sign;
     return 1;
 }
+
 /* Helper function to read a binary number with modifiers.
  * out: Pointer to store result (unsigned long long).
  * If NULL, acts as suppression (%*b).
@@ -755,95 +844,62 @@ int my_scanf(const char *format, ...) {
                 }
             }
             else if (*p == 's') {
-                char *dest = NULL;
+                // Le cambiamos el nombre a 'out' aquí también si prefieres
+                char *out = suppress ? NULL : va_arg(args, char *);
 
-                // Si NO hay supresión (*), sacamos la dirección del argumento
-                if (!suppress) {
-                    dest = va_arg(args, char *);
-                }
-
-                // Llamamos a la función pasando el 'width' parseado anteriormente
-                // (Si el usuario puso %10s, width es 10. Si puso %s, es -1).
-                if (read_string(dest, width)) {
-                    if (!suppress) {
-                        count++;
-                    }
-                } else {
+                if (!read_string(out, width)) { // Llamamos pasando 'out'
                     va_end(args);
-                    return count; // EOF encontrado
+                    return count;
                 }
+
+                if (!suppress) count++;
             }
             else if (*p == 'x') {
-                unsigned long long buffer_val; // Caja grande temporal
-                unsigned long long *ptr_to_pass = &buffer_val;
+                unsigned long long buffer_val;
 
-                // Si hay supresión (*), pasamos NULL
-                if (suppress) {
-                    ptr_to_pass = NULL;
-                }
+                // 1. Ternario: Ahorramos 4 líneas de setup
+                unsigned long long *ptr_to_pass = suppress ? NULL : &buffer_val;
 
-                // Llamamos a read_hex con el ancho parseado
+                // 2. Llamada y Check de Error
                 if (!read_hex(ptr_to_pass, width)) {
                     va_end(args);
                     return count;
                 }
 
-                // Si no hubo supresión, guardamos el dato en la variable real
+                // 3. Guardado (Esta parte NO se puede acortar, es la lógica real)
                 if (!suppress) {
-                    if (length_mod == 4) { // ll (unsigned long long)
-                        unsigned long long *dest = va_arg(args, unsigned long long *);
-                        *dest = buffer_val;
+                    if (length_mod == 4) { // ll
+                        *va_arg(args, unsigned long long *) = buffer_val;
                     }
-                    else if (length_mod == 3) { // l (unsigned long)
-                        unsigned long *dest = va_arg(args, unsigned long *);
-                        *dest = (unsigned long)buffer_val;
+                    else if (length_mod == 3) { // l
+                        *va_arg(args, unsigned long *) = (unsigned long)buffer_val;
                     }
-                    else if (length_mod == 1) { // h (unsigned short)
-                        unsigned short *dest = va_arg(args, unsigned short *);
-                        *dest = (unsigned short)buffer_val;
+                    else if (length_mod == 1) { // h
+                        *va_arg(args, unsigned short *) = (unsigned short)buffer_val;
                     }
-                    else if (length_mod == 2) { // hh (unsigned char)
-                        unsigned char *dest = va_arg(args, unsigned char *);
-                        *dest = (unsigned char)buffer_val;
+                    else if (length_mod == 2) { // hh
+                        *va_arg(args, unsigned char *) = (unsigned char)buffer_val;
                     }
-                    else { // 0: unsigned int normal (default)
-                        unsigned int *dest = va_arg(args, unsigned int *);
-                        *dest = (unsigned int)buffer_val;
+                    else { // default (int)
+                        *va_arg(args, unsigned int *) = (unsigned int)buffer_val;
                     }
                     count++;
                 }
             }
             else if (*p == 'f') {
-                double buffer_val; // Usamos double (caja grande) para calcular
-                double *ptr_to_pass = &buffer_val;
+                double buffer_val;
+                double *ptr = suppress ? NULL : &buffer_val;
 
-                if (suppress) {
-                    ptr_to_pass = NULL;
-                }
-
-                // Llamamos a la función
-                if (!read_float(ptr_to_pass, width)) {
+                // Llamamos a read_float (que ya soporta exponentes internamente)
+                if (!read_float(ptr, width)) {
                     va_end(args);
                     return count;
                 }
 
                 if (!suppress) {
-                    // REPARTO SEGÚN TAMAÑO (Length Modifier)
-                    // length_mod == 3 significa 'l' (long), o sea %lf -> double
-                    if (length_mod == 3) {
-                        double *dest = va_arg(args, double *);
-                        *dest = buffer_val; // Ya es double, entra directo
-                    }
-                    // length_mod == 4 significa 'L' (long double) - Opcional
-                    else if (length_mod == 4) {
-                        long double *dest = va_arg(args, long double *);
-                        *dest = (long double)buffer_val;
-                    }
-                    // Por defecto (0), es %f -> float
-                    else {
-                        float *dest = va_arg(args, float *);
-                        *dest = (float)buffer_val; // Convertimos double a float (casting)
-                    }
+                    if (length_mod == 3) *va_arg(args, double *) = buffer_val;
+                    else if (length_mod == 4) *va_arg(args, long double *) = (long double)buffer_val;
+                    else *va_arg(args, float *) = (float)buffer_val;
                     count++;
                 }
             }
