@@ -9,13 +9,23 @@
  * ========================================================================= */
 
 /**
+ * Internal Helper: Consumes whitespace and returns the first non-space char.
+ */
+int skip_whitespace() {
+    int c;
+    do {
+        c = getchar();
+    } while (isspace(c));
+    return c; // Devuelve el primer carácter útil (o EOF)
+}
+
+/**
  * Reads a signed integer with support for field width.
  * @param out: Pointer to store the result (long long to support all int sizes).
  * @param width: Max characters to read. -1 indicates no limit.
  * @return 1 on success, 0 on failure.
  */
 int read_int(long long *out, int width) {
-    int c;
     long long sign = 1;
     long long value = 0;
     int chars_processed = 0;
@@ -23,9 +33,7 @@ int read_int(long long *out, int width) {
     int has_width = (width > 0);
 
     // Skip leading whitespace (standard scanf behavior)
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
 
@@ -58,9 +66,8 @@ int read_int(long long *out, int width) {
         c = getchar();
     }
 
-    // Restore the stopper character IF it wasn't handled by the width check.
-    // (i.e., we stopped because we found a non-digit letter)
-    if (c != EOF && (!has_width || chars_processed < width)) {
+    // Restore the stopper character
+    if (c != EOF && !isdigit(c)) {
         ungetc(c, stdin);
     }
 
@@ -90,8 +97,7 @@ int read_char(char *out, int width) {
         width = 1;
     }
 
-    int i;
-    for (i = 0; i < width; i++) {
+    for (int i = 0; i < width; i++) {
         int c = getchar();
 
         // Strict EOF check: standard scanf fails if it can't read the full width
@@ -120,16 +126,13 @@ int read_char(char *out, int width) {
  * @return 1 on success, 0 on failure.
  */
 int read_string(char *out, int width) {
-    int c;
     int chars_read = 0;
 
     // If no width specified, default to INT_MAX (read until whitespace).
     if (width == -1) width = INT_MAX;
 
     // Skip leading whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
 
@@ -172,16 +175,13 @@ int read_string(char *out, int width) {
  * @return 1 on success, 0 on failure.
  */
 int read_hex(unsigned long long *out, int width) {
-    int c;
     unsigned long long value = 0;
     int digits_read = 0;
     int chars_processed = 0;
     int has_width = (width > 0);
 
     // Skip leading whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
 
@@ -261,7 +261,6 @@ int read_hex(unsigned long long *out, int width) {
  * @return 1 on success, 0 on failure.
  */
 int read_float(double *out, int width) {
-    int c;
     int chars = 0;
     int has_width = (width > 0);
 
@@ -270,9 +269,7 @@ int read_float(double *out, int width) {
     int has_digits = 0;
 
     // Skip leading whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
 
@@ -358,9 +355,6 @@ int read_float(double *out, int width) {
 
         // Valid exponent = at least one DIGIT found
         if (exp_digits > 0) {
-            // Commit the consumed characters
-            chars += 1 + has_exp_sign + exp_digits;
-
             // Apply exponent manually (avoids <math.h> dependency)
             while (exponent-- > 0) {
                 if (exp_sign > 0) value *= 10.0;
@@ -371,6 +365,10 @@ int read_float(double *out, int width) {
             if (c != EOF) ungetc(c, stdin);                 // 1. Push back the stopper char
             if (has_exp_sign) ungetc(exp_sign_char, stdin); // 2. Push back the sign
             ungetc(e_char, stdin);                          // 3. Push back 'e'
+
+            // FIX: Prevent double ungetc at 'finish' label
+            // We already manually restored 'c', so we mark it as handled.
+            c = EOF;
         }
     }
 
@@ -402,16 +400,13 @@ finish:
  * @return 1 on success, 0 on failure.
  */
 int read_binary(unsigned long long *out, int width) {
-    int c;
     unsigned long long value = 0;
     int digits_read = 0;
     int chars_processed = 0;
     int has_width = (width > 0);
 
     // Skip leading whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
 
@@ -462,7 +457,6 @@ int read_binary(unsigned long long *out, int width) {
  * @return 1 on success, 0 on failure (EOF).
  */
 int read_line(char *out, int width) {
-    int c;
     int chars_read = 0;
 
     // Handle default width: Use a safe maximum integer if width is -1
@@ -474,9 +468,7 @@ int read_line(char *out, int width) {
     // DESIGN CHOICE: Standard scanf("%[^\n]") does NOT skip leading whitespace.
     // However, we skip it here to consume any leftover '\n' from previous inputs,
     // making the function more robust for interactive use.
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     // Check EOF
     if (c == EOF) return 0;
@@ -567,22 +559,13 @@ static int read_hex_pair() {
  * @return 1 on success, 0 on failure.
  */
 int read_color(RGBColor *out, int width) {
-    int c;
     int chars_processed = 0;
     int has_width = (width > 0);
 
     // Skip leading whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
-
-    // Check Width (before reading prefix)
-    if (has_width && chars_processed >= width) {
-        ungetc(c, stdin);
-        return 0;
-    }
 
     // Match mandatory prefix '#'
     if (c != '#') {
@@ -637,15 +620,12 @@ int read_color(RGBColor *out, int width) {
  */
 int read_date(Date *out, int width) {
     int d = 0, m = 0, y = 0;
-    int c;
     int sep1 = 0; // Store first separator to ensure consistency with the second
     int chars_processed = 0;
     int has_width = (width > 0);
 
     // Skip leading whitespace
-    do {
-        c = getchar();
-    } while (isspace(c));
+    int c = skip_whitespace();
 
     if (c == EOF) return 0;
 
@@ -767,13 +747,63 @@ int read_date(Date *out, int width) {
     return 1; // Success
 }
 
+/* =========================================================================
+ * INTERNAL PARSING HELPERS (Static)
+ * These abstract the format string parsing logic from the main loop.
+ * ========================================================================= */
+
+/**
+ * Helper: Parses the field width from the format string.
+ * Updates the pointer 'p' automatically.
+ * @param p: Pointer to the current position in the format string.
+ * @return: The parsed width, or -1 if no width specified.
+ */
+static int parse_width(const char **p) {
+    int width = -1;
+    // We check if the current character is a digit
+    if (isdigit(**p)) {
+        width = 0;
+        while (isdigit(**p)) {
+            width = width * 10 + (**p - '0');
+            (*p)++; // We advance to the original pointer
+        }
+    }
+    return width;
+}
+
+/**
+ * Helper: Parses length modifiers (h, l, ll, etc).
+ * Updates the pointer 'p' automatically.
+ * @param p: Pointer to the current position in the format string.
+ * @return: Modifier code (0=none, 1=h, 2=hh, 3=l, 4=ll, 5=j, 6=z, 7=t).
+ */
+static int parse_length_modifier(const char **p) {
+    int mod = 0;
+    if (**p == 'h') {
+        (*p)++;
+        if (**p == 'h') { mod = 2; (*p)++; } // hh
+        else            { mod = 1; }         // h
+    }
+    else if (**p == 'l') {
+        (*p)++;
+        if (**p == 'l') { mod = 4; (*p)++; } // ll
+        else            { mod = 3; }         // l
+    }
+    else if (**p == 'j') { mod = 5; (*p)++; }
+    else if (**p == 'z') { mod = 6; (*p)++; }
+    else if (**p == 't') { mod = 7; (*p)++; }
+
+    return mod;
+}
+
 /**
  * Custom implementation of scanf.
  * Supports standard specifiers: %d, %x, %f, %c, %s
  * Supports custom specifiers:   %b (binary), %L (line), %D (date), %R (color)
  * Supports modifiers:           Width, Suppression (*), Length (h, hh, l, ll)
  *
- * @param format: The format string.
+ * @param format:
+ * @param ...: Variable arguments matching the format string.
  * @return Number of input items successfully matched and assigned.
  */
 int my_scanf(const char *format, ...) {
@@ -791,47 +821,18 @@ int my_scanf(const char *format, ...) {
             p++; // Skip '%'
 
             // 1. Check for Assignment Suppression (*)
-            // If present, we parse the input but do NOT store it.
             int suppress = 0;
             if (*p == '*') {
                 suppress = 1;
                 p++;
             }
 
-            // 2. Check Field Width
-            // -1 indicates no specific limit (read until delimiter).
-            int width = -1;
-            if (isdigit(*p)) {
-                width = 0;
-                while (isdigit(*p)) {
-                    width = width * 10 + (*p - '0');
-                    p++;
-                }
-            }
+            // 2. Parse Field Width (Using Helper)
+            // Pasamos &p (la dirección del puntero) para que el helper lo mueva
+            int width = parse_width(&p);
 
-            // 3. Check Length Modifiers
-            // Mapping:
-            // 0 = default (int/float)
-            // 1 = h (short)
-            // 2 = hh (char)
-            // 3 = l (long / double)
-            // 4 = ll (long long / long double)
-            // 5=j, 6=z, 7=t (Standard C types)
-            int length_mod = 0;
-
-            if (*p == 'h') {
-                p++;
-                if (*p == 'h') { length_mod = 2; p++; } // hh
-                else           { length_mod = 1; }      // h
-            }
-            else if (*p == 'l') {
-                p++;
-                if (*p == 'l') { length_mod = 4; p++; } // ll
-                else           { length_mod = 3; }      // l
-            }
-            else if (*p == 'j') { length_mod = 5; p++; }
-            else if (*p == 'z') { length_mod = 6; p++; }
-            else if (*p == 't') { length_mod = 7; p++; }
+            // 3. Parse Length Modifiers (Using Helper)
+            int length_mod = parse_length_modifier(&p);
 
             // =====================================================
             // B. CHECK CONVERSION SPECIFIERS
@@ -982,7 +983,7 @@ int my_scanf(const char *format, ...) {
             // Case 1: Whitespace in format string matches ANY amount of whitespace
             if (isspace(*p)) {
                 int c;
-                while (isspace(c = getchar())); // Consume all whitespace
+                while (isspace(c = getchar())) {} // Consume all whitespace
                 if (c != EOF) {
                     ungetc(c, stdin); // Put back the first non-space char
                 }
