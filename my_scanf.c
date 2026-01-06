@@ -16,7 +16,7 @@ int skip_whitespace() {
     do {
         c = getchar();
     } while (isspace(c));
-    return c; // Devuelve el primer carácter útil (o EOF)
+    return c; // Returns the first useful character (or EOF)
 }
 
 /**
@@ -400,7 +400,6 @@ finish:
  * @return 1 on success, 0 on failure.
  */
 int read_binary(unsigned long long *out, int width) {
-    int c;
     long long sign = 1;
     unsigned long long value = 0; // 64-bit internal accumulator
     int chars_processed = 0;
@@ -408,10 +407,10 @@ int read_binary(unsigned long long *out, int width) {
     int has_width = (width > 0);
 
     int start_c = skip_whitespace();
-    c = start_c;
+    int c = start_c;
     if (c == EOF) return 0;
 
-    // 1. Handle Sign
+    // Handle Sign
     if (c == '-' || c == '+') {
         if (has_width && chars_processed >= width) {
             ungetc(c, stdin);
@@ -422,7 +421,7 @@ int read_binary(unsigned long long *out, int width) {
         c = getchar();
     }
 
-    // 2. Process bits using 64-bit logic
+    // Process bits using 64-bit logic
     while (c == '0' || c == '1') {
         if (has_width && chars_processed >= width) {
             ungetc(c, stdin);
@@ -473,7 +472,7 @@ int read_line(char *out, int width) {
 
     int c = getchar();
 
-    // 1. "Intelligent Skip": Consume spaces and newlines...
+    // "Intelligent Skip": Consume spaces and newlines...
     // ...but stop if we hit the actual end of data.
     while (1) {
         // Skip horizontal whitespace (spaces/tabs)
@@ -503,14 +502,14 @@ int read_line(char *out, int width) {
         }
     }
 
-    // 2. Handle Empty Line (The one we decided NOT to skip)
+    // Handle Empty Line (The one we decided NOT to skip)
     if (c == '\n') {
         if (out != NULL) *out = '\0';
         ungetc(c, stdin);
         return 1;
     }
 
-    // 3. Read Line Content
+    // Read Line Content
     while (c != EOF && c != '\n' && chars_read < width) {
         if (out != NULL) {
             *out = (char)c;
@@ -534,7 +533,7 @@ int read_line(char *out, int width) {
  * Returns: Integer value (0-255) on success, -1 on failure.
  * -------------------------------------------------------------------------- */
 static int read_hex_pair() {
-    // 1. Read High Nibble (First digit, e.g., the 'F' in "FF")
+    // Read High Nibble (First digit, e.g., the 'F' in "FF")
     int c1 = getchar();
     int d1 = -1;
 
@@ -549,7 +548,7 @@ static int read_hex_pair() {
         return -1;
     }
 
-    // 2. Read Low Nibble (Second digit, e.g., the second 'F' in "FF")
+    // Read Low Nibble (Second digit, e.g., the second 'F' in "FF")
     int c2 = getchar();
     int d2 = -1;
 
@@ -566,7 +565,7 @@ static int read_hex_pair() {
         return -1;
     }
 
-    // 3. Combine nibbles into a byte
+    // Combine nibbles into a byte
     // Formula: (High * 16) + Low
     return (d1 * 16) + d2;
 }
@@ -742,7 +741,7 @@ int read_date(Date *out, int width) {
 
     int max_days = days_in_month[m];
 
-    // Leap Year Logic (The "Bisiesto" Check)
+    // Leap Year Logic
     // Only matters if month is February (2)
     if (m == 2) {
         // Rule: Year divisible by 4...
@@ -795,7 +794,7 @@ static int parse_width(const char **p) {
 }
 
 /**
- * Helper: Parses length modifiers (h, l, ll, etc).
+ * Helper: Parses length modifiers (h, l, ll, etc.).
  * Updates the pointer 'p' automatically.
  * @param p: Pointer to the current position in the format string.
  * @return: Modifier code (0=none, 1=h, 2=hh, 3=l, 4=ll, 5=j, 6=z, 7=t).
@@ -851,14 +850,14 @@ int my_scanf(const char *format, ...) {
             }
 
             // 2. Parse Field Width (Using Helper)
-            // Pasamos &p (la dirección del puntero) para que el helper lo mueva
+            // We pass &p (the address of the pointer) so that the helper function can move it.
             int width = parse_width(&p);
 
             // 3. Parse Length Modifiers (Using Helper)
             int length_mod = parse_length_modifier(&p);
 
             // =====================================================
-            // B. CHECK CONVERSION SPECIFIERS
+            // CHECK CONVERSION SPECIFIERS
             // =====================================================
 
             // --- Case: Signed Integer (%d) ---
@@ -869,6 +868,7 @@ int my_scanf(const char *format, ...) {
                 // Call helper (returns 0 on failure)
                 if (!read_int(ptr_to_pass, width)) {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
 
@@ -890,16 +890,22 @@ int my_scanf(const char *format, ...) {
 
                 if (!read_hex(ptr_to_pass, width)) {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
 
                 if (!suppress) {
-                    if      (length_mod == 4) *va_arg(args, unsigned long long *) = buffer_val;
-                    else if (length_mod == 3) *va_arg(args, unsigned long *)      = (unsigned long)buffer_val;
-                    else if (length_mod == 1) *va_arg(args, unsigned short *)     = (unsigned short)buffer_val;
-                    else if (length_mod == 2) *va_arg(args, unsigned char *)      = (unsigned char)buffer_val;
-                    else                      *va_arg(args, unsigned int *)       = (unsigned int)buffer_val;
-
+                    if (length_mod == 4) {      // ll -> unsigned long long
+                        *va_arg(args, unsigned long long *) = buffer_val;
+                    } else if (length_mod == 3) { // l -> unsigned long
+                        *va_arg(args, unsigned long *) = (unsigned long)buffer_val;
+                    } else if (length_mod == 1) { // h -> unsigned short
+                        *va_arg(args, unsigned short *) = (unsigned short)buffer_val;
+                    } else if (length_mod == 2) { // hh -> unsigned char
+                        *va_arg(args, unsigned char *) = (unsigned char)buffer_val;
+                    } else {                      // default -> unsigned int
+                        *va_arg(args, unsigned int *) = (unsigned int)buffer_val;
+                    }
                     count++;
                 }
             }
@@ -910,6 +916,7 @@ int my_scanf(const char *format, ...) {
 
                 if (!read_float(ptr_to_pass, width)) {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
 
@@ -929,12 +936,13 @@ int my_scanf(const char *format, ...) {
 
                 if (!read_binary(ptr_to_pass, width)) {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
 
                 if (!suppress) {
                     // We MUST use the correct pointer size.
-                    // B27 fails because it expects 64 bits but you might be giving it 32.
+                    // B27 fails because it expects 64 bits, but you might be giving it 32.
                     if (length_mod == 4) {      // ll
                         *va_arg(args, unsigned long long *) = buffer_val;
                     } else if (length_mod == 3) { // l
@@ -956,6 +964,7 @@ int my_scanf(const char *format, ...) {
 
                 // read_char handles the looping logic based on width
                 if (read_char(dest, width)) {
+                    if (count == 0 && feof(stdin)) return EOF;
                     if (!suppress) count++;
                 } else {
                     va_end(args);
@@ -970,10 +979,10 @@ int my_scanf(const char *format, ...) {
                     if (!suppress) count++;
                 } else {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
             }
-            // --- Case: Full Line (%L) [Custom] ---
             // --- Case: Full Line (%L) [Custom] ---
             else if (*p == 'L') {
                 char *dest = suppress ? NULL : va_arg(args, char *);
@@ -981,6 +990,7 @@ int my_scanf(const char *format, ...) {
                     if (!suppress) count++;
                 } else {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
             }
@@ -992,6 +1002,7 @@ int my_scanf(const char *format, ...) {
                     if (!suppress) count++;
                 } else {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
             }
@@ -1003,6 +1014,7 @@ int my_scanf(const char *format, ...) {
                     if (!suppress) count++;
                 } else {
                     va_end(args);
+                    if (count == 0 && feof(stdin)) return EOF;
                     return count;
                 }
             }
@@ -1014,7 +1026,7 @@ int my_scanf(const char *format, ...) {
             // The previous "special L check" broke D_Flow and others.
             if (isspace(*p)) {
                 int c;
-                while ((c = getchar()) != EOF && isspace(c));
+                while ((c = getchar()) != EOF && isspace(c)){}
                 if (c != EOF) ungetc(c, stdin);
             } else {
                 int c = getchar();

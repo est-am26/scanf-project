@@ -100,7 +100,7 @@ void test_d_plus_sign(void) {
 void test_d_minus_only_fail(void) {
     // Test: Fail if input is just a minus sign with no digits.
     int x = 0;
-    prepare_input("-");
+    prepare_input("-\n");
     ASSERT_EQ(0, my_scanf("%d", &x), "D11_Ret");
 }
 
@@ -123,7 +123,7 @@ void test_d_width_truncation(void) {
 void test_d_width_sign_only_fail(void) {
     // Test: Fail if width cuts off the number right after the sign.
     int x = 0;
-    prepare_input("-5");
+    prepare_input("-5\n");
     ASSERT_EQ(0, my_scanf("%1d", &x), "D16_Ret");
 }
 
@@ -246,10 +246,6 @@ void test_d_suppression_width(void) {
     prepare_input("999");
     ASSERT_EQ(0, my_scanf("%*2d"), "D_SuppressWidth_Ret");
 }
-
-/* =========================================================================
- * MODIFIER TESTS (%lld, %hd)
- * ========================================================================= */
 
 void test_modifiers_lld(void) {
     // Test: Long Long modifier handles large numbers > 32 bit.
@@ -405,7 +401,7 @@ void test_c_multiple_reads_flow(void) {
 }
 
 void test_c_interleaved_with_string(void) {
-    // FIX: Use width limit %5s so it stops at "hello" and leaves "X" for %c.
+    // Use width limit %5s so it stops at "hello" and leaves "X" for %c.
     // Without width, %s would consume "helloX" entirely because there is no space.
     char c = 0;
     char buf[10];
@@ -441,10 +437,10 @@ void test_c_width_three_with_spaces(void) {
 void test_c_skip_whitespace_directive(void) {
     // Fire Test: Format " %c" (with space) MUST skip leading whitespace.
     // Standard "%c" reads the space. " %c" skips it.
-    char c = 'Z'; // Valor basura inicial
+    char c = 'Z'; // Initial garbage value
     prepare_input("   A");
 
-    // Notar el espacio antes del %c
+    // Notice the space before the %c
     ASSERT_EQ(1, my_scanf(" %c", &c), "C_SkipSpace_Ret");
     ASSERT_EQ('A', c, "C_SkipSpace_Val");
 }
@@ -454,8 +450,8 @@ void test_c_suppression_width_combo(void) {
     char c = 0;
     prepare_input("123X");
 
-    // %*3c se come "123". El siguiente %c debe leer 'X'.
-    // Retorna 1 porque solo %c cuenta (la supresión no).
+    // %*3c consumes "123". The next %c should read 'X'.
+    // Returns 1 because only %c counts (the suppression doesn't).
     ASSERT_EQ(1, my_scanf("%*3c%c", &c), "C_SuppressWidth_Ret");
     ASSERT_EQ('X', c, "C_SuppressWidth_Val");
 }
@@ -466,8 +462,8 @@ void test_c_ignore_modifiers(void) {
     char c = 0;
     prepare_input("M");
 
-    // Tu parser leerá el 'h', verá que es modificador, y luego leerá 'c'.
-    // Debe funcionar igual que %c normal.
+    // The parser will read the 'h', see that it's a modifier, and then read the 'c'.
+    // It should work the same as a normal %c.
     ASSERT_EQ(1, my_scanf("%hc", &c), "C_Modifier_Ret");
     ASSERT_EQ('M', c, "C_Modifier_Val");
 }
@@ -570,14 +566,14 @@ void test_s_empty_input_fail(void) {
     // Test: Fails immediately if input is empty (EOF).
     char buf[10];
     prepare_input("");
-    ASSERT_EQ(0, my_scanf("%s", buf), "S15_EmptyFail");
+    ASSERT_EQ(EOF, my_scanf("%s", buf), "S15_EmptyFail");
 }
 
 void test_s_only_whitespace_fail(void) {
     // Test: Fails if input is only whitespace (and then EOF).
     char buf[10];
     prepare_input("   \t\n");
-    ASSERT_EQ(0, my_scanf("%s", buf), "S16_WhitespaceFail");
+    ASSERT_EQ(EOF, my_scanf("%s", buf), "S16_WhitespaceFail");
 }
 
 void test_s_suppression_consumes_word(void) {
@@ -760,7 +756,7 @@ void test_x_prefix_without_digits_fail(void) {
     // Note: Standard scanf usually returns 1 reading the '0' and leaving 'x',
     // but failing is also a valid strict interpretation.
     unsigned int x = 0;
-    prepare_input("0x");
+    prepare_input("0x\n");
     ASSERT_EQ(0, my_scanf("%x", &x), "X09_0xFail");
 }
 
@@ -790,7 +786,7 @@ void test_x_positive_sign(void) {
 void test_x_sign_only_fail(void) {
     // Test: Sign without digits fails.
     unsigned int x = 0;
-    prepare_input("-");
+    prepare_input("-\n");
     ASSERT_EQ(0, my_scanf("%x", &x), "X13_SignFail");
 }
 
@@ -859,7 +855,7 @@ void test_x_only_whitespace_fail(void) {
     // Test: Fail on empty/whitespace input.
     unsigned int x = 0;
     prepare_input("   ");
-    ASSERT_EQ(0, my_scanf("%x", &x), "X22_WSFail");
+    ASSERT_EQ(EOF, my_scanf("%x", &x), "X22_WSFail");
 }
 
 void test_x_leading_zeros(void) {
@@ -912,7 +908,7 @@ void test_x_sign_and_prefix(void) {
 }
 
 void test_x_mixed_case_prefix(void) {
-    // Fire Test: Mixed casing in digits (0xA, 0Xa, etc).
+    // Fire Test: Mixed casing in digits (0xA, 0Xa, etc.).
     unsigned int x = 0;
     prepare_input("0XaB");
     my_scanf("%x", &x);
@@ -921,7 +917,7 @@ void test_x_mixed_case_prefix(void) {
 
 void test_x_ignore_modifiers(void) {
     // Fire Test: Should handle (or ignore) length modifiers like 'l' or 'h'.
-    unsigned int x = 0;
+    unsigned long x = 0;
     prepare_input("FF");
     // Even if we treat %lx as %x, it should work for small numbers.
     ASSERT_EQ(1, my_scanf("%lx", &x), "X33_ModifierRet");
@@ -935,20 +931,6 @@ void test_x_zero_input(void) {
     my_scanf("%x", &x);
     ASSERT_EQ(0, x, "X35_Zero");
 }
-
-#include <math.h> // Necesario para fabs()
-
-// Macro especial para comparar doubles con tolerancia
-#define ASSERT_DBL_NEAR(expected, actual, tol, code) do { \
-    tests_run++; \
-    double diff = fabs((expected) - (actual)); \
-    if (diff > (tol)) { \
-        tests_failed++; \
-        printf("❌ [FAIL %s] Expected %f, got %f (diff %g)\n", code, (expected), (actual), diff); \
-    } else { \
-        printf("✅ [PASS %s]\n", code); \
-    } \
-} while (0)
 
 /* =========================================================================
  * FLOATING POINT TESTS (%f)
@@ -1012,14 +994,14 @@ void test_f_trailing_dot(void) {
 
 void test_f_dot_only_fail(void) {
     // Test: Fail if input is only a dot with no digits.
-    float x = 1.0;
-    prepare_input(".");
+    float x = 1.0f;
+    prepare_input(".\n");
     ASSERT_EQ(0, my_scanf("%f", &x), "F09_DotFail");
 }
 
 void test_f_sign_only_fail(void) {
     // Test: Fail if input is only a sign with no digits.
-    float x = 1.0;
+    float x = 1.0f;
     prepare_input("-");
     ASSERT_EQ(0, my_scanf("%f", &x), "F10_SignFail");
 }
@@ -1261,7 +1243,7 @@ void test_b_only_whitespace_fail(void) {
     // Test: Fail on input containing only whitespace.
     unsigned long long x = 0;
     prepare_input("   \t");
-    ASSERT_EQ(0, my_scanf("%b", &x), "B12_WSFail");
+    ASSERT_EQ(EOF, my_scanf("%b", &x), "B12_WSFail");
 }
 
 void test_b_width_basic(void) {
@@ -1454,7 +1436,7 @@ void test_L_eof_immediate(void) {
     // Test: Empty input should result in failure (EOF).
     char buf[10];
     prepare_input("");
-    ASSERT_EQ(0, my_scanf("%L", buf), "L19_EOFFail");
+    ASSERT_EQ(EOF, my_scanf("%L", buf), "L19_EOFFail");
 }
 
 void test_L_suppressed(void) {
@@ -1586,49 +1568,49 @@ void test_D_leading_whitespace(void) {
 void test_D_mixed_separators_fail(void) {
     // Test: Fail if separators are mixed (e.g., 12-05/2024).
     Date d;
-    prepare_input("12-05/2024");
+    prepare_input("12-05/2024\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D11_MixedFail");
 }
 
 void test_D_missing_separator(void) {
     // Test: Fail if separators are missing entirely.
     Date d;
-    prepare_input("12052024");
+    prepare_input("12052024\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D12_NoSep");
 }
 
 void test_D_invalid_month(void) {
     // Test: Fail on invalid month > 12.
     Date d;
-    prepare_input("10/13/2023");
+    prepare_input("10/13/2023\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D13_BadMonth");
 }
 
 void test_D_day_zero(void) {
     // Test: Fail if day is 0.
     Date d;
-    prepare_input("0/10/2023");
+    prepare_input("0/10/2023\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D14_DayZero");
 }
 
 void test_D_day_overflow(void) {
     // Test: Fail if day > 31 (generic check).
     Date d;
-    prepare_input("32/01/2023");
+    prepare_input("32/01/2023\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D15_DayOverflow");
 }
 
 void test_D_april_31(void) {
     // Test: Fail if day > 30 for April.
     Date d;
-    prepare_input("31/04/2023");
+    prepare_input("31/04/2023\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D16_April31");
 }
 
 void test_D_feb29_non_leap(void) {
     // Test: Fail Feb 29 on non-leap year.
     Date d;
-    prepare_input("29/02/2023");
+    prepare_input("29/02/2023\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D17_Feb29Fail");
 }
 
@@ -1643,7 +1625,7 @@ void test_D_feb29_leap(void) {
 void test_D_1900_not_leap(void) {
     // Test: Fail Feb 29 on 1900 (divisible by 100 but not 400).
     Date d;
-    prepare_input("29/02/1900");
+    prepare_input("29/02/1900\n");
     ASSERT_EQ(0, my_scanf("%D", &d), "D20_1900Fail");
 }
 
@@ -1822,7 +1804,7 @@ void test_R_only_hash(void) {
     // Test: Input ends immediately after hash.
     RGBColor c;
     prepare_input("#");
-    ASSERT_EQ(0, my_scanf("%R", &c), "R19_OnlyHash");
+    ASSERT_EQ(EOF, my_scanf("%R", &c), "R19_OnlyHash");
 }
 
 void test_R_invalid_first_nibble(void) {
@@ -1850,7 +1832,7 @@ void test_R_too_short(void) {
     // Test: Not enough digits.
     RGBColor c;
     prepare_input("#1234");
-    ASSERT_EQ(0, my_scanf("%R", &c), "R23_TooShort");
+    ASSERT_EQ(EOF, my_scanf("%R", &c), "R23_TooShort");
 }
 
 void test_R_extra_digits(void) {
@@ -1889,7 +1871,7 @@ void test_R_eof_after_hash(void) {
     // Test: EOF right after hash.
     RGBColor c;
     prepare_input("#");
-    ASSERT_EQ(0, my_scanf("%R", &c), "R29_EOF");
+    ASSERT_EQ(EOF, my_scanf("%R", &c), "R29_EOF");
 }
 
 void test_R_suppressed(void) {
@@ -2176,9 +2158,9 @@ int main(void) {
     printf("TESTS RUN: %d\n", tests_run);
 
     if (tests_failed == 0) {
-        printf("RESULT: ALL CLEAR! (100%%) 🏆\n");
+        printf("RESULT: ALL CLEAR! (100%%) \n");
     } else {
-        printf("RESULT: %d TESTS FAILED ⚠️\n", tests_failed);
+        printf("RESULT: %d TESTS FAILED \n", tests_failed);
     }
     printf("========================================\n");
 

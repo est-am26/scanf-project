@@ -5,7 +5,7 @@
 #include <stdarg.h>
 #include <ctype.h>
 
-// Definición de la estructura para el color
+// Definition of the structure for the color
 typedef struct {
     int r;
     int g;
@@ -18,7 +18,7 @@ typedef struct {
     int year;
 } Date;
 
-// Esta es la "firma" de tu función
+// This is the "signature" of your function
 int my_scanf(const char *format, ...);
 
 #endif
